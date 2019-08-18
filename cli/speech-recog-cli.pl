@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 #
-# Render speech to text using Google's Cloud Speech API.
+# Render speech to text using NTU SpeechTeam Cloud Speech API.
 #
 # Copyright (C) 2011 - 2016, Lefteris Zafiris <zaf@fastmail.com>
 #
@@ -16,6 +16,8 @@
 #  resulted text is correct.
 #
 
+# Modify by NTU SpeechTeam on August 18, 2019
+
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
@@ -29,7 +31,10 @@ use MIME::Base64;
 my %options;
 my $flac;
 my $key;
-my $url        = "https://speech.googleapis.com/v1/speech";
+my $tdata;
+#my $url        = "https://speech.googleapis.com/v1/speech";
+my $url         = "http://155.69.149.126:8002/client/dynamic/recognize" #Internal testing.
+
 my $samplerate = 16000;
 my $language   = "en-US";
 my $output     = "detailed";
@@ -55,7 +60,7 @@ my $ua = LWP::UserAgent->new(ssl_opts => {verify_hostname => 1});
 $ua->agent("CLI speech recognition script");
 $ua->env_proxy;
 $ua->conn_cache(LWP::ConnCache->new());
-$ua->timeout(60);
+$ua->timeout(100);
 
 # send each sound file to Google and get the recognition results #
 foreach my $file (@ARGV) {
@@ -86,11 +91,23 @@ foreach my $file (@ARGV) {
 		"config" => \%config,
 		"audio"  => \%audio,
 	);
-	my $response = $ua->post(
-		"$url:recognize?key=$key",
-		Content_Type => "application/json",
-		Content      => encode_json(\%json),
-	);
+	#my $response = $ua->post(
+	#	"$url:recognize?key=$key",
+	#	Content_Type => "application/json",
+	#	Content      => encode_json(\%json),
+	#);
+	
+	open my $testfh, '<', $file or die;
+        $/ = undef;
+        $tdata = <$testfh>;
+        close $testfh;
+	
+        my $response = $ua->put(
+                "$url?token=$key",
+                Content_Type => "audio/x-wav",
+                Content      => $tdata,
+        );
+
 	if (!$response->is_success) {
 		say_msg("Failed to get data for file: $file");
 		++$error;
