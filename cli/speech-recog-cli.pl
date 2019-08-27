@@ -30,10 +30,12 @@ use MIME::Base64;
 
 my %options;
 my $flac;
-my $key;
 my $tdata;
-#my $url        = "https://speech.googleapis.com/v1/speech";
-my $url         = "http://155.69.149.126:8002/client/dynamic/recognize" #Internal testing.
+my $key;
+
+my $url        = "http://40.90.170.182:8001/client/dynamic/recognize";
+
+#https://sg-decoding.southeastasia.cloudapp.azure.com/api/auth/token 
 
 my $samplerate = 16000;
 my $language   = "en-US";
@@ -65,13 +67,19 @@ $ua->timeout(100);
 # send each sound file to Google and get the recognition results #
 foreach my $file (@ARGV) {
 	my ($filename, $dir, $ext) = fileparse($file, qr/\.[^.]*/);
+	
+	open my $testfh, '<', $file or die;
+	$/ = undef;
+	$tdata = <$testfh>;
+	close $testfh;
+	
 	if ($ext ne ".flac" && $ext ne ".wav") {
 		say_msg("Unsupported file-type: $ext");
 		++$error;
 		next;
 	}
 	if ($ext eq ".wav") {
-		if (($file = encode_flac($file)) eq '-1') {
+		if (($file = encode_bin($file)) eq '-1') {
 			++$error;
 			next;
 		}
@@ -97,17 +105,12 @@ foreach my $file (@ARGV) {
 	#	Content      => encode_json(\%json),
 	#);
 	
-	open my $testfh, '<', $file or die;
-        $/ = undef;
-        $tdata = <$testfh>;
-        close $testfh;
+	my $response = $ua->post(
+		"$url?token=$key",
+		Content_Type => "audio/x-wav",
+		Content => $tdata,
+	);
 	
-        my $response = $ua->put(
-                "$url?token=$key",
-                Content_Type => "audio/x-wav",
-                Content      => $tdata,
-        );
-
 	if (!$response->is_success) {
 		say_msg("Failed to get data for file: $file");
 		++$error;
@@ -118,13 +121,16 @@ foreach my $file (@ARGV) {
 		next;
 	}
 	my $jdata = decode_json($response->content);
+	
 	if ($output eq "detailed") {
-		foreach (@{$jdata->{"results"}[0]->{"alternatives"}}) {
-			printf "%-10s : %s\n", "transcript", $_->{"transcript"};
-			printf "%-10s : %s\n", "confidence", $_->{"confidence"} if $_->{"confidence"};
+		foreach (@{$jdata->{"hypotheses"}}) {
+			printf "%-10s : %s\n", "transcript", $_->{"utterance"};
 		}
+		
+		
 	} elsif ($output eq "compact") {
-		print $_->{"transcript"}."\n" foreach (@{$jdata->{"results"}[0]->{"alternatives"}});
+		print $_->{"utterance"}."\n" foreach (@{$jdata->{"hypotheses"}});
+		
 	}
 }
 
@@ -194,6 +200,14 @@ sub encode_flac {
 	return $tmpname;
 }
 
+sub encode_bin {
+	my $file   = shift;
+	my $tmpdir = "/tmp";
+	
+	my ($fh, $tmpname) = tempfile("recg_XXXXXX", DIR => $tmpdir, SUFFIX => '.wav', UNLINK => 1);
+	return $tmpname;
+}
+
 sub say_msg {
 # Print messages to user if 'quiet' flag is not set #
 	my @message = @_;
@@ -203,10 +217,10 @@ sub say_msg {
 
 sub VERSION_MESSAGE {
 # Help message #
-	print "Speech recognition using Google Cloud Speech API.\n\n",
+	print "Speech recognition using SpeechLab API.\n\n",
 		"Usage: $0 [options] [file(s)]\n\n",
 		"Supported options:\n",
-		" -k <key>       specify the Speech API key\n",
+		" -k <key>       specify the SpeechLab API key\n",
 		" -l <lang>      specify the language to use (default 'en-US')\n",
 		" -o <type>      specify the type of output formatting\n",
 		"    detailed    print detailed output with info like confidence (default)\n",
