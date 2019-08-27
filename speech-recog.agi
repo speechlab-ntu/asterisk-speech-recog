@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 #
-# AGI script that renders speech to text using Google's Cloud Speech API.
+# AGI script that renders speech to text using NTU SpeechTeam's Cloud Speech API.
 #
 # Copyright (C) 2011 - 2016, Lefteris Zafiris <zaf@fastmail.com>
 #
@@ -28,7 +28,7 @@
 #     resulted text is correct.
 #
 # User defined parameters:
-# Speech API key from Google:
+# Speech API key from NTU SpeechLab:
 #	$key
 #
 # Default language:
@@ -48,6 +48,7 @@
 #	$pro_filter ('false':disable, 'true': remove profanities)
 #
 
+# Modify by NTU SpeechTeam on August 27, 2019
 use warnings;
 use strict;
 use File::Copy qw(move);
@@ -98,7 +99,9 @@ my $beep       = "BEEP";
 my $comp_level = -8;
 my $ua_timeout = 30;
 my $tmpdir     = "/tmp";
-my $url        = "https://speech.googleapis.com/v1/speech";
+#my $url        = "https://speech.googleapis.com/v1/speech";
+my $url        = "http://40.90.170.182:8001/client/dynamic/recognize";
+my $tdata;
 my $phrases    = "";
 my @phrases    = [];
 
@@ -210,6 +213,11 @@ if ($debug) {
 		"Language: $language, ", "$silence, Interrupt keys: $intkey\n";
 }
 
+open my $testfh, '<', "$tmpname.$format" or die;
+$/ = undef;
+$tdata = <$testfh>;
+close $testfh;
+
 # Encode audio data to flac #
 my $endian = (unpack("h*", pack("s", 1)) =~ /01/) ? "big" : "little";
 system($flac, $comp_level, "--totally-silent", "--channels=1", "--endian=$endian",
@@ -234,10 +242,16 @@ my %json = (
 	"audio"  => \%audio,
 );
 # Send audio data for analysis #
+#my $uaresponse = $ua->post(
+#	"$url:recognize?key=$key",
+#	Content_Type => "application/json",
+#	Content      => encode_json(\%json),
+#);
+
 my $uaresponse = $ua->post(
-	"$url:recognize?key=$key",
-	Content_Type => "application/json",
-	Content      => encode_json(\%json),
+	"$url?token=$key",
+	Content_Type => "audio/x-wav",
+	Content      => $tdata,
 );
 
 warn "$name The response was:\n", $uaresponse->content if ($debug);
@@ -247,8 +261,11 @@ if (!$uaresponse->is_success) {
 	die "$name Unable to get recognition data.\n";
 }
 my $jdata = decode_json($uaresponse->content);
-$response{utterance} = encode('utf8', $jdata->{"results"}[0]->{"alternatives"}[0]->{"transcript"});
-$response{confidence} = $jdata->{"results"}[0]->{"alternatives"}[0]->{"confidence"};
+#$response{utterance} = encode('utf8', $jdata->{"results"}[0]->{"alternatives"}[0]->{"transcript"});
+#$response{confidence} = $jdata->{"results"}[0]->{"alternatives"}[0]->{"confidence"};
+
+$response{utterance} = $jdata->{"hypotheses"}[0]{"utterance"}
+$response{confidence}= 1.0;
 
 set_channel_vars(%response);
 exit;
